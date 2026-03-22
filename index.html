@@ -439,15 +439,31 @@ function G(id,el){
 function iniciar(){
   var v=document.getElementById('keyIn').value.trim();
   var err=document.getElementById('keyErr');
-  if(!v){err.textContent='Por favor pega tu API Key de Groq.';err.style.display='block';return;}
+  var btn=document.getElementById('btnIniciar');
+  if(!v){
+    err.textContent='⚠️ Por favor pega tu API Key de Groq primero.';
+    err.style.display='block';
+    return;
+  }
   err.style.display='none';
+  // Visual feedback while saving
+  btn.textContent='⏳ Guardando...';
+  btn.style.opacity='0.7';
   KEY=v;
   try{localStorage.setItem('et_key',v);}catch(e){}
-  load();checkStreak();
-  document.getElementById('tabBar').style.display='flex';
-  document.querySelectorAll('.tab')[0].classList.add('active');
-  loadFrase();updXP();updHome();
-  show('home');
+  load();
+  checkStreak();
+  setTimeout(function(){
+    document.getElementById('tabBar').style.display='flex';
+    document.querySelectorAll('.tab')[0].classList.add('active');
+    loadFrase();
+    updXP();
+    updHome();
+    show('home');
+    window.scrollTo(0,0);
+    btn.textContent='✅ Guardar y empezar';
+    btn.style.opacity='1';
+  }, 300);
 }
 function cambiarKey(){
   KEY='';
@@ -1036,7 +1052,7 @@ function loadProg(){
 (function(){
   var k='';
   try{k=localStorage.getItem('et_key')||'';}catch(e){}
-  if(k){
+  if(k&&k.length>10){
     KEY=k;
     load();
     checkStreak();
@@ -1048,6 +1064,11 @@ function loadProg(){
     show('home');
   } else {
     show('setup');
+    // Auto-fill if there's a saved key that failed
+    try{
+      var old=localStorage.getItem('et_key')||'';
+      if(old) document.getElementById('keyIn').value=old;
+    }catch(e){}
   }
 })();
 </script>
