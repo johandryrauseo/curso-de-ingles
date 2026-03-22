@@ -763,16 +763,26 @@ function dsearch(q){
   }
   if(dHist.indexOf(found.en)<0){dHist.unshift(found.en);if(dHist.length>8)dHist.pop();updDHist();}
   // Show result with image placeholder
-  r.innerHTML=
-    '<div class="dimg-wrap" id="dimgWrap"><div class="dimg-loading" id="dimgLoad">🖼️</div></div>'+
-    '<div id="dimgCredit" class="dimg-credit"></div>'+
-    '<div class="dword">'+found.en+'</div>'+
-    '<div class="dphon">'+found.phon+'</div>'+
-    '<button class="dhear" onclick="speakW(''+found.en+'')">🔊 Escuchar pronunciación</button>'+
-    '<div class="dcat">'+found.cat+'</div>'+
-    '<div class="dtrans">🇪🇸 '+found.es+'</div>'+
-    '<div class="dex">'+found.ex.join('<br>')+'</div>';
-  // Fetch image from Unsplash (free, no key needed for source.unsplash.com)
+  // Build result using helper to avoid quote escaping issues
+  var hearBtn = document.createElement('button');
+  hearBtn.className = 'dhear';
+  hearBtn.textContent = '🔊 Escuchar pronunciación';
+  hearBtn.onclick = function(){ speakW(found.en); };
+
+  r.innerHTML =
+    '<div class="dimg-wrap" id="dimgWrap"><div class="dimg-loading" id="dimgLoad">🖼️</div></div>' +
+    '<div id="dimgCredit" class="dimg-credit"></div>' +
+    '<div class="dword">' + found.en + '</div>' +
+    '<div class="dphon">' + found.phon + '</div>' +
+    '<div id="dhearSlot"></div>' +
+    '<div class="dcat">' + found.cat + '</div>' +
+    '<div class="dtrans">🇪🇸 ' + found.es + '</div>' +
+    '<div class="dex">' + found.ex.join('<br>') + '</div>';
+
+  // Inject the button safely
+  var slot = document.getElementById('dhearSlot');
+  if(slot) slot.appendChild(hearBtn);
+
   loadDictImage(found.en);
 }
 
