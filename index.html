@@ -783,99 +783,136 @@ function dsearch(q){
 function doSearch(q){
   var r=document.getElementById('dRes');
   r.classList.add('show');
-  r.innerHTML='<div style="text-align:center;padding:20px;color:#8888aa;font-size:.8rem;">🔍 Buscando...</div>';
+  r.innerHTML='<div style="text-align:center;padding:20px;color:#8888aa;font-size:.82rem;">🔍 Buscando...</div>';
 
+  // Step 1: detect if input is Spanish and translate it first
   var qNorm=norm(q);
-  // Try ES→EN translation first
-  var searchTerm=ES_BASIC[qNorm]||q;
+  var localEN=ES_BASIC[qNorm]||null;
 
-  // Use Free Dictionary API — no key needed, unlimited words
-  fetch('https://api.dictionaryapi.dev/api/v2/entries/en/'+encodeURIComponent(searchTerm))
+  if(localEN){
+    // We have it in local map, search directly
+    fetchDefinition(localEN, q, r);
+  } else {
+    // Check if it looks like Spanish (not English)
+    // Use MyMemory free translation API — no key needed
+    var looksSpanish=detectSpanish(q);
+    if(looksSpanish){
+      fetch('https://api.mymemory.translated.net/get?q='+encodeURIComponent(q)+'&langpair=es|en')
+        .then(function(res){return res.json();})
+        .then(function(data){
+          var translated=(data.responseData&&data.responseData.translatedText)||q;
+          // MyMemory returns the English word
+          translated=translated.split(' ')[0]; // take first word if phrase
+          fetchDefinition(translated, q, r);
+        })
+        .catch(function(){
+          fetchDefinition(q, q, r);
+        });
+    } else {
+      // Already English, search directly
+      fetchDefinition(q, q, r);
+    }
+  }
+}
+
+function detectSpanish(word){
+  // Simple heuristic: contains Spanish-only chars or common Spanish patterns
+  var w=word.toLowerCase();
+  if(/[áéíóúüñ¿¡]/.test(word)) return true;
+  // Common Spanish endings/patterns
+  if(/ción$|ión$|ando$|endo$|ado$|ido$|mente$|dad$|eza$|ura$/.test(w)) return true;
+  // Known Spanish words not in English
+  var spanishWords=['pez','cielo','tierra','fuego','agua','sol','luna','noche','dia',
+    'casa','coche','calle','ciudad','pais','nino','ninos','hombre','mujer','rojo',
+    'azul','verde','amarillo','negro','blanco','gris','grande','pequeno','bueno',
+    'malo','nuevo','viejo','joven','bonito','feo','rapido','lento','alto','bajo',
+    'caliente','frio','barato','caro','facil','dificil','feliz','triste','hambre',
+    'sed','sueno','miedo','dolor','amor','odio','trabajo','escuela','libro','mesa',
+    'silla','cama','puerta','ventana','perro','gato','pajaro','pez','caballo',
+    'vaca','cerdo','pollo','ojo','nariz','boca','oreja','mano','pie','corazon'];
+  return spanishWords.indexOf(w)>=0;
+}
+
+function fetchDefinition(word, originalQuery, r){
+  word=word.trim().toLowerCase();
+  fetch('https://api.dictionaryapi.dev/api/v2/entries/en/'+encodeURIComponent(word))
     .then(function(res){
       if(!res.ok) throw new Error('not_found');
       return res.json();
     })
     .then(function(data){
       var entry=data[0];
-      var word=entry.word;
+      var wordResult=entry.word;
+      // Phonetic
       var phonetic='';
-      // Get phonetic
       if(entry.phonetics){
         var ph=entry.phonetics.find(function(p){return p.text;});
         if(ph) phonetic=ph.text;
       }
-      // Get meanings
+      // Meanings
       var meanings=entry.meanings||[];
       var defsHtml='';
       meanings.slice(0,3).forEach(function(m){
-        defsHtml+='<div style="margin-bottom:10px;">';
-        defsHtml+='<span style="background:#1e1e38;border-radius:5px;padding:2px 8px;font-size:.67rem;color:#a78bfa;margin-bottom:5px;display:inline-block;">'+m.partOfSpeech+'</span>';
-        m.definitions.slice(0,2).forEach(function(d){
-          defsHtml+='<div style="font-size:.8rem;color:#e0e0f0;margin:4px 0;">• '+d.definition+'</div>';
+        defsHtml+='<div style="margin-bottom:12px;">';
+        defsHtml+='<div style="background:#252548;border-radius:6px;padding:2px 10px;font-size:.68rem;color:#a78bfa;display:inline-block;margin-bottom:6px;">'+m.partOfSpeech+'</div>';
+        m.definitions.slice(0,2).forEach(function(d,i){
+          defsHtml+='<div style="font-size:.81rem;color:#e0e0f0;margin:4px 0;line-height:1.5;">'+
+            '<span style="color:#6c63ff;margin-right:4px;">'+(i+1)+'.</span>'+d.definition+'</div>';
           if(d.example){
-            defsHtml+='<div style="font-size:.75rem;color:#8888aa;font-style:italic;margin-left:10px;">"'+d.example+'"</div>';
+            defsHtml+='<div style="font-size:.75rem;color:#8888aa;font-style:italic;margin:3px 0 3px 14px;padding:4px 8px;border-left:2px solid #6c63ff33;">"'+d.example+'"</div>';
           }
         });
-        // Synonyms
         if(m.synonyms&&m.synonyms.length>0){
-          defsHtml+='<div style="font-size:.72rem;color:#9999bb;margin-top:4px;">Similar: '+m.synonyms.slice(0,4).join(', ')+'</div>';
+          defsHtml+='<div style="font-size:.71rem;color:#9999bb;margin-top:4px;">'+
+            '<span style="color:#7777aa;">Sinónimos: </span>'+m.synonyms.slice(0,5).join(' · ')+'</div>';
         }
         defsHtml+='</div>';
       });
 
-      // Spanish translation note
-      var esNote='';
-      var esKey=Object.keys(ES_BASIC).find(function(k){return ES_BASIC[k]===word.toLowerCase();});
-      if(esKey) esNote='<div style="font-size:.95rem;font-weight:600;color:#e0e0f0;margin-bottom:10px;">🇪🇸 '+esKey+'</div>';
-      else if(searchTerm!==q) esNote='<div style="font-size:.82rem;color:#9999bb;margin-bottom:8px;">🇪🇸 Buscado como: <em>'+q+'</em></div>';
+      // Translation note if searched in Spanish
+      var transNote='';
+      if(norm(originalQuery)!==norm(wordResult)){
+        transNote='<div style="background:#1a1a2e;border-radius:8px;padding:6px 10px;font-size:.78rem;color:#9999bb;margin-bottom:10px;">'+
+          '🇪🇸 <em>'+originalQuery+'</em> → <strong style="color:#a78bfa;">'+wordResult+'</strong></div>';
+      } else {
+        // Try to show Spanish meaning from local dict
+        var local=DICT.find(function(d){return norm(d.en)===norm(wordResult);});
+        if(local) transNote='<div style="font-size:.95rem;font-weight:600;color:#e0e0f0;margin-bottom:10px;">🇪🇸 '+local.es+'</div>';
+      }
 
-      // Save to history
-      if(dHist.indexOf(word)<0){dHist.unshift(word);if(dHist.length>10)dHist.pop();updDHist();}
+      // Save history
+      if(dHist.indexOf(wordResult)<0){dHist.unshift(wordResult);if(dHist.length>12)dHist.pop();updDHist();}
 
-      // Build result using DOM to avoid quote issues
       r.innerHTML=
         '<div class="dimg-wrap" id="dimgWrap"><div class="dimg-loading" id="dimgLoad">🖼️</div></div>'+
         '<div id="dimgCredit" class="dimg-credit"></div>'+
-        '<div class="dword">'+word+'</div>'+
+        '<div class="dword">'+wordResult+'</div>'+
         (phonetic?'<div class="dphon">'+phonetic+'</div>':'')+
-        '<div id="dhearSlot" style="margin-bottom:8px;"></div>'+
-        esNote+
+        '<div id="dhearSlot" style="margin-bottom:10px;"></div>'+
+        transNote+
         defsHtml;
 
-      // Inject speak button safely
       var btn=document.createElement('button');
       btn.className='dhear';
       btn.textContent='🔊 Escuchar pronunciación';
-      btn.onclick=function(){speakW(word);};
+      btn.onclick=function(){speakW(wordResult);};
       var slot=document.getElementById('dhearSlot');
       if(slot)slot.appendChild(btn);
 
-      // Load image
-      loadDictImage(word);
+      loadDictImage(wordResult);
     })
     .catch(function(){
-      // Fallback to local dictionary
-      var found=DICT.find(function(d){return norm(d.en)===norm(searchTerm)||norm(d.en)===qNorm||norm(d.es||'')===qNorm;});
-      if(found){
-        if(dHist.indexOf(found.en)<0){dHist.unshift(found.en);if(dHist.length>10)dHist.pop();updDHist();}
-        r.innerHTML=
-          '<div class="dimg-wrap" id="dimgWrap"><div class="dimg-loading" id="dimgLoad">🖼️</div></div>'+
-          '<div id="dimgCredit" class="dimg-credit"></div>'+
-          '<div class="dword">'+found.en+'</div>'+
-          '<div class="dphon">'+found.phon+'</div>'+
-          '<div id="dhearSlot2" style="margin-bottom:8px;"></div>'+
-          '<div class="dcat">'+found.cat+'</div>'+
-          '<div class="dtrans">🇪🇸 '+found.es+'</div>'+
-          '<div class="dex">'+found.ex.join('<br>')+'</div>';
-        var btn2=document.createElement('button');
-        btn2.className='dhear';btn2.textContent='🔊 Escuchar';
-        btn2.onclick=function(){speakW(found.en);};
-        var slot2=document.getElementById('dhearSlot2');
-        if(slot2)slot2.appendChild(btn2);
-        loadDictImage(found.en);
-      } else {
-        r.innerHTML='<div class="dnf">😕 No encontramos "<strong>'+q+'</strong>".<br><small>Intenta en inglés: happy, house, beautiful...</small></div>';
-      }
+      // Word not found in dictionary API
+      r.innerHTML=
+        '<div style="text-align:center;padding:20px;">' +
+        '<div style="font-size:2.5rem;margin-bottom:10px;">😕</div>'+
+        '<div style="font-size:.85rem;color:#e0e0f0;margin-bottom:6px;">No encontramos <strong>"'+originalQuery+'"</strong></div>'+
+        '<div style="font-size:.75rem;color:#7777aa;line-height:1.7;">'+
+        'Intenta con:<br>'+
+        '• Palabras en inglés: <em>happy, beautiful, work</em><br>'+
+        '• Palabras en español: <em>feliz, hermoso, trabajo</em><br>'+
+        '• Verbos en infinitivo: <em>run, eat, go</em>'+
+        '</div></div>';
     });
 }
 
